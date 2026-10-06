@@ -1,4 +1,13 @@
-// Service worker: контекстное меню + горячая клавиша + сохранение в storage
+// Service worker: контекстное меню, горячая клавиша, сохранение картинок, примерка через Replicate
+
+import {
+  toInputUrl,
+  reuploadRemoteImage,
+  createPrediction,
+  waitForPrediction,
+  firstOutputUrl,
+  verifyToken,
+} from "./replicate.js";
 
 const MENU_ID = "clothes-picker-save";
 
@@ -24,15 +33,28 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "SAVE_IMAGE") {
-    saveImage(msg.payload).then((result) => sendResponse(result));
-    return true; // асинхронный ответ
+    saveImage(msg.payload).then(sendResponse);
+    return true;
   }
   if (msg.type === "TOGGLE_PICKER_IN_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
       if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_PICKER" }).catch(() => {});
     });
   }
+  if (msg.type === "START_TRYON") {
+    startTryOn(msg.payload).then(sendResponse, (e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+  if (msg.type === "VERIFY_TOKEN") {
+    verifyToken(msg.token).then(
+      (acc) => sendResponse({ ok: true, username: acc.username }),
+      (e) => sendResponse({ ok: false, error: e.message })
+    );
+    return true;
+  }
 });
+
+// ---------- сохранение картинок ----------
 
 async function saveImage({ src, pageUrl, title, alt }) {
   if (!src) return { ok: false, reason: "no-src" };
@@ -55,3 +77,90 @@ async function saveImage({ src, pageUrl, title, alt }) {
 chrome.storage.local.get("images").then(({ images = [] }) => {
   chrome.action.setBadgeText({ text: images.length ? String(images.length) : "" });
 });
+
+// ---------- примерка ----------
+
+async function updateJob(id, patch) {
+  const { tryons = [] } = await chrome.storage.local.get("tryons");
+  const idx = tryons.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  tryons[idx] = { ...tryons[idx], ...patch, updatedAt: Date.now() };
+  await chrome.storage.local.set({ tryons });
+}
+
+async function startTryOn({ garmentIds, prompt, turbo }) {
+  const { images = [], profilePhoto, replicateToken, tryons = [] } = await chrome.storage.local.get([
+    "images",
+    "profilePhoto",
+    "replicateToken",
+    "tryons",
+  ]);
+  if (!replicateToken) return { ok: false, error: "Нет API-токена Replicate — добавь его в настройках" };
+  if (!profilePhoto?.dataUrl) return { ok: false, error: "Сначала загрузи своё фото" };
+  const garments = garmentIds.map((id) => images.find((i) => i.id === id)).filter(Boolean);
+  if (!garments.length) return { ok: false, error: "Выбери хотя бы одну вещь" };
+  if (garments.length > 11) return { ok: false, error: "Максимум 11 вещей за раз" };
+
+  const job = {
+    id: crypto.randomUUID(),
+    status: "starting",
+    garments: garments.map((g) => ({ id: g.id, src: g.src })),
+    prompt: prompt || "",
+    output: null,
+    error: null,
+    predictionId: null,
+    createdAt: Date.now(),
+  };
+  tryons.unshift(job);
+  await chrome.storage.local.set({ tryons });
+
+  runTryOn(job, { token: replicateToken, personDataUrl: profilePhoto.dataUrl, turbo }).catch((e) =>
+    updateJob(job.id, { status: "failed", error: e.message })
+  );
+  return { ok: true, jobId: job.id };
+}
+
+async function runTryOn(job, { token, personDataUrl, turbo }) {
+  await updateJob(job.id, { status: "uploading" });
+  const personUrl = await toInputUrl(token, personDataUrl, "person.jpg");
+
+  const makeInput = (garmentUrls) => {
+    const input = { person_image: personUrl, garment_images: garmentUrls };
+    if (job.prompt) input.prompt = job.prompt;
+    if (turbo) input.turbo = true;
+    return input;
+  };
+
+  let prediction;
+  try {
+    prediction = await runOnce(job, token, makeInput(job.garments.map((g) => g.src)));
+  } catch (e) {
+    if (!looksLikeFetchProblem(e)) throw e;
+    // Магазин не отдал картинку Replicate (hotlink-защита) — скачиваем сами и заливаем
+    await updateJob(job.id, { status: "uploading", note: "Перезаливаю картинки вещей…" });
+    const urls = [];
+    for (const g of job.garments) urls.push(await reuploadRemoteImage(token, g.src));
+    prediction = await runOnce(job, token, makeInput(urls));
+  }
+
+  const output = firstOutputUrl(prediction.output);
+  if (!output) throw new Error("Модель не вернула картинку");
+  await updateJob(job.id, { status: "succeeded", output, note: null, metrics: prediction.metrics || null });
+}
+
+async function runOnce(job, token, input) {
+  await updateJob(job.id, { status: "processing" });
+  let prediction = await createPrediction(token, input);
+  await updateJob(job.id, { predictionId: prediction.id });
+  prediction = await waitForPrediction(token, prediction, (p) => updateJob(job.id, { status: p.status }));
+  if (prediction.status !== "succeeded") {
+    throw new Error(prediction.error || `Статус: ${prediction.status}`);
+  }
+  return prediction;
+}
+
+function looksLikeFetchProblem(e) {
+  return /download|fetch|403|404|forbidden|not found|timed? ?out|unsupported|could not|invalid image|cannot identify/i.test(
+    e.message || ""
+  );
+}

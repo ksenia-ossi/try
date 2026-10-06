@@ -1,0 +1,17 @@
+.cp-hover-outline {
+  outline: 3px solid #ff3b7f !important;
+  outline-offset: 2px !important;
+  cursor: crosshair !important;
+}
+#cp-banner {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 2147483647; background: #111; color: #fff; font: 13px/1.4 system-ui, sans-serif;
+  padding: 8px 14px; border-radius: 999px; box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  pointer-events: none;
+}
+#cp-toast {
+  position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
+  background: #ff3b7f; color: #fff; font: 13px system-ui, sans-serif;
+  padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s;
+}
+#cp-toast.show { opacity: 1; }

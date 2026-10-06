@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>Clothes Picker</h1>
+    <button id="toggle" class="primary">Выбрать картинки на странице</button>
+    <p class="hint">Или ПКМ по картинке → «Сохранить картинку в Clothes Picker». Горячая клавиша: Alt+Shift+P</p>
+  </header>
+  <section>
+    <div class="toolbar">
+      <span id="count"></span>
+      <button id="export">Экспорт JSON</button>
+      <button id="clear" class="danger">Очистить</button>
+    </div>
+    <div id="grid" class="grid"></div>
+    <p id="empty" class="empty">Пока ничего не сохранено</p>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

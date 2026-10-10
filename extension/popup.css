@@ -22,12 +22,25 @@ button.danger { color: #c00; }
 .card.selected { outline-color: #ff3b7f; }
 .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card .del { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; border: 0; border-radius: 50%; width: 22px; height: 22px; padding: 0; line-height: 22px; }
-.card .check { position: absolute; top: 4px; left: 4px; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.9); border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; }
-.card.selected .check { background: #ff3b7f; border-color: #ff3b7f; }
+.card .badge { position: absolute; top: 4px; left: 4px; padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); border: 1px solid #ddd; font-size: 10px; color: #555; }
+.card.selected .badge { background: #ff3b7f; border-color: #ff3b7f; color: #fff; }
+.card .slot-menu { position: absolute; inset: 0; background: rgba(255,255,255,.95); display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 8px; box-sizing: border-box; }
+.card .slot-menu button { padding: 5px 6px; font-size: 12px; }
+.card .slot-menu button.current { border-color: #ff3b7f; color: #ff3b7f; font-weight: 600; }
+.card .slot-menu .slot-menu-title { font-size: 11px; color: #555; text-align: center; margin-bottom: 2px; }
 .card a { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
 .empty { color: #999; text-align: center; margin: 24px 0; }
-.action-bar { position: sticky; bottom: 0; margin: 12px -12px -12px; padding: 10px 12px; background: #fff; border-top: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
-.action-bar span { flex: 1; color: #555; }
+.action-bar { position: sticky; bottom: 0; margin: 12px -12px -12px; padding: 10px 12px; background: #fff; border-top: 1px solid #eee; }
+.action-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.action-row span { flex: 1; color: #555; font-size: 12px; }
+.slots { display: flex; gap: 8px; }
+.slot { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; border: 1px dashed #ccc; border-radius: 8px; padding: 6px 4px; background: #fafafa; }
+.slot.filled { border-style: solid; border-color: #ff3b7f; background: #fff5f8; }
+.slot-thumb { width: 44px; height: 56px; border-radius: 4px; background: #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 18px; }
+.slot-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.slot-name { font-size: 11px; color: #555; }
+.slot-clear { display: none; position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; line-height: 16px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; border: 0; font-size: 12px; }
+.slot.filled .slot-clear { display: block; }
 
 .photo-block { display: flex; gap: 12px; }
 .photo-preview { width: 110px; height: 146px; border-radius: 8px; background: #f4f4f4; overflow: hidden; display: flex; align-items: center; justify-content: center; flex: none; }
@@ -68,6 +81,8 @@ button.danger { color: #c00; }
 .confirm-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .confirm-plus { color: #999; font-size: 18px; }
 .confirm-garments { display: flex; gap: 4px; flex-wrap: wrap; }
+.confirm-garments { gap: 8px; }
+.confirm-garment { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: #555; }
 .confirm-garments img { width: 40px; height: 52px; object-fit: cover; border-radius: 4px; background: #f4f4f4; }
 .confirm-cost { margin: 10px 0 0; color: #333; }
 .confirm-cost strong { color: #ff3b7f; }

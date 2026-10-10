@@ -17,7 +17,7 @@
   <!-- ВЕЩИ -->
   <section id="tab-items" class="tab active">
     <button id="toggle" class="primary">Выбрать картинки на странице</button>
-    <p class="hint">Или ПКМ по картинке → «Сохранить картинку в Clothes Picker». Горячая клавиша: Alt+Shift+P</p>
+    <p class="hint">Или ПКМ по картинке → «Сохранить картинку в Clothes Picker». Горячая клавиша: Alt+Shift+P.<br>Для примерки кликни по вещи и выбери слот: Верх, Низ или Обувь (по одной вещи в слот).</p>
     <div class="toolbar">
       <span id="count"></span>
       <button id="export">Экспорт JSON</button>
@@ -25,9 +25,16 @@
     </div>
     <div id="grid" class="grid"></div>
     <p id="empty" class="empty">Пока ничего не сохранено</p>
-    <div id="tryon-bar" class="action-bar hidden">
-      <span id="selected-count"></span>
-      <button id="start-tryon" class="primary">Примерить</button>
+    <div id="tryon-bar" class="action-bar">
+      <div class="slots" id="slots">
+        <div class="slot" data-slot="top"><div class="slot-thumb"></div><span class="slot-name">Верх</span><button class="slot-clear" title="Убрать">×</button></div>
+        <div class="slot" data-slot="bottom"><div class="slot-thumb"></div><span class="slot-name">Низ</span><button class="slot-clear" title="Убрать">×</button></div>
+        <div class="slot" data-slot="shoes"><div class="slot-thumb"></div><span class="slot-name">Обувь</span><button class="slot-clear" title="Убрать">×</button></div>
+      </div>
+      <div class="action-row">
+        <span id="selected-count">Выбери вещи для примерки</span>
+        <button id="start-tryon" class="primary" disabled>Примерить</button>
+      </div>
     </div>
   </section>
 

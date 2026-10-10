@@ -88,7 +88,9 @@ async function updateJob(id, patch) {
   await chrome.storage.local.set({ tryons });
 }
 
-async function startTryOn({ garmentIds, prompt, turbo }) {
+const SLOTS = ["top", "bottom", "shoes"];
+
+async function startTryOn({ slots = {}, prompt, turbo }) {
   const { images = [], profilePhoto, replicateToken, tryons = [] } = await chrome.storage.local.get([
     "images",
     "profilePhoto",
@@ -97,14 +99,21 @@ async function startTryOn({ garmentIds, prompt, turbo }) {
   ]);
   if (!replicateToken) return { ok: false, error: "Нет API-токена Replicate — добавь его в настройках" };
   if (!profilePhoto?.dataUrl) return { ok: false, error: "Сначала загрузи своё фото" };
-  const garments = garmentIds.map((id) => images.find((i) => i.id === id)).filter(Boolean);
+  // по одной вещи на слот (Верх / Низ / Обувь), от 1 до 3 вещей
+  const garments = [];
+  for (const slot of SLOTS) {
+    if (!slots[slot]) continue;
+    const item = images.find((i) => i.id === slots[slot]);
+    if (!item) return { ok: false, error: `Вещь для слота «${slot}» не найдена` };
+    if (garments.some((g) => g.id === item.id)) return { ok: false, error: "Одна вещь не может занимать два слота" };
+    garments.push({ ...item, slot });
+  }
   if (!garments.length) return { ok: false, error: "Выбери хотя бы одну вещь" };
-  if (garments.length > 11) return { ok: false, error: "Максимум 11 вещей за раз" };
 
   const job = {
     id: crypto.randomUUID(),
     status: "starting",
-    garments: garments.map((g) => ({ id: g.id, src: g.src })),
+    garments: garments.map((g) => ({ id: g.id, src: g.src, slot: g.slot })),
     prompt: prompt || "",
     output: null,
     error: null,

@@ -1,10 +1,12 @@
 const $ = (sel) => document.querySelector(sel);
 
 const MAX_PHOTO_SIDE = 1536;
-const MAX_GARMENTS = 11;
-const RECOMMENDED_GARMENTS = 6;
 
-const selected = new Set();
+// Слоты примерки: не больше одной вещи в каждом, хотя бы один заполнен
+const SLOTS = ["top", "bottom", "shoes"];
+const SLOT_NAMES = { top: "Верх", bottom: "Низ", shoes: "Обувь" };
+const slotSelection = { top: null, bottom: null, shoes: null }; // slot → image id
+let openMenuCardId = null;
 
 // ---------- вкладки ----------
 
@@ -26,46 +28,112 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
+function slotOf(id) {
+  return SLOTS.find((slot) => slotSelection[slot] === id) || null;
+}
+
+function selectedIds() {
+  return SLOTS.map((slot) => slotSelection[slot]).filter(Boolean);
+}
+
 async function renderImages() {
   const { images = [] } = await chrome.storage.local.get("images");
   const grid = $("#grid");
   grid.innerHTML = "";
   $("#empty").style.display = images.length ? "none" : "block";
   $("#count").textContent = images.length ? `Сохранено: ${images.length}` : "";
-  for (const id of [...selected]) if (!images.some((i) => i.id === id)) selected.delete(id);
+  for (const slot of SLOTS) if (slotSelection[slot] && !images.some((i) => i.id === slotSelection[slot])) slotSelection[slot] = null;
+  if (openMenuCardId && !images.some((i) => i.id === openMenuCardId)) openMenuCardId = null;
 
   for (const item of images) {
+    const inSlot = slotOf(item.id);
+    const badgeSlot = inSlot || item.slot;
     const card = document.createElement("div");
-    card.className = "card" + (selected.has(item.id) ? " selected" : "");
+    card.className = "card" + (inSlot ? " selected" : "");
+    card.dataset.id = item.id;
     card.innerHTML = `
       <img src="${item.src}" alt="" loading="lazy" />
-      <div class="check">${selected.has(item.id) ? "✓" : ""}</div>
+      ${badgeSlot ? `<div class="badge">${SLOT_NAMES[badgeSlot]}</div>` : ""}
       <button class="del" title="Удалить">×</button>
       <a href="${item.pageUrl}" target="_blank" title="${item.pageUrl}">${hostOf(item.pageUrl)}</a>`;
+    if (openMenuCardId === item.id) card.appendChild(buildSlotMenu(item));
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".del, a")) return;
-      toggleSelect(item.id);
+      if (e.target.closest(".del, a, .slot-menu")) return;
+      onCardClick(item);
     });
     card.querySelector(".del").addEventListener("click", () => removeImage(item.id));
     grid.appendChild(card);
   }
-  renderSelectionBar();
+  renderSlots(images);
 }
 
-function toggleSelect(id) {
-  if (selected.has(id)) selected.delete(id);
-  else if (selected.size >= MAX_GARMENTS) return;
-  else selected.add(id);
+function buildSlotMenu(item) {
+  const menu = document.createElement("div");
+  menu.className = "slot-menu";
+  menu.innerHTML = `<div class="slot-menu-title">В какой слот?</div>`;
+  for (const slot of SLOTS) {
+    const b = document.createElement("button");
+    b.textContent = SLOT_NAMES[slot];
+    b.dataset.slot = slot;
+    if (item.slot === slot) b.classList.add("current");
+    b.addEventListener("click", () => assignToSlot(item, slot));
+    menu.appendChild(b);
+  }
+  const cancel = document.createElement("button");
+  cancel.textContent = "Отмена";
+  cancel.addEventListener("click", () => { openMenuCardId = null; renderImages(); });
+  menu.appendChild(cancel);
+  return menu;
+}
+
+function onCardClick(item) {
+  const inSlot = slotOf(item.id);
+  if (inSlot) {
+    slotSelection[inSlot] = null; // повторный клик снимает выбор
+    openMenuCardId = null;
+  } else {
+    openMenuCardId = openMenuCardId === item.id ? null : item.id;
+  }
   renderImages();
 }
 
-function renderSelectionBar() {
-  const bar = $("#tryon-bar");
-  bar.classList.toggle("hidden", selected.size === 0);
-  const n = selected.size;
-  $("#selected-count").textContent =
-    n > RECOMMENDED_GARMENTS ? `Выбрано: ${n} (рекомендуется до ${RECOMMENDED_GARMENTS})` : `Выбрано: ${n}`;
+async function assignToSlot(item, slot) {
+  slotSelection[slot] = item.id;
+  openMenuCardId = null;
+  if (item.slot !== slot) {
+    // запоминаем выбранный слот у вещи — без автораспознавания, только то, что указала ты
+    const { images = [] } = await chrome.storage.local.get("images");
+    const idx = images.findIndex((i) => i.id === item.id);
+    if (idx !== -1) {
+      images[idx] = { ...images[idx], slot };
+      await chrome.storage.local.set({ images });
+      return; // storage.onChanged перерисует
+    }
+  }
+  renderImages();
 }
+
+function renderSlots(images) {
+  let filled = 0;
+  for (const el of document.querySelectorAll("#slots .slot")) {
+    const slot = el.dataset.slot;
+    const item = images.find((i) => i.id === slotSelection[slot]);
+    el.classList.toggle("filled", !!item);
+    el.querySelector(".slot-thumb").innerHTML = item ? `<img src="${item.src}" alt="" />` : "+";
+    if (item) filled++;
+  }
+  $("#start-tryon").disabled = filled === 0;
+  $("#selected-count").textContent = filled
+    ? `Выбрано: ${filled} из 3`
+    : "Выбери хотя бы одну вещь";
+}
+
+document.querySelectorAll("#slots .slot-clear").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    slotSelection[btn.closest(".slot").dataset.slot] = null;
+    renderImages();
+  });
+});
 
 async function removeImage(id) {
   const { images = [] } = await chrome.storage.local.get("images");
@@ -105,10 +173,10 @@ $("#start-tryon").addEventListener("click", async () => {
   if (!profilePhoto?.dataUrl) { showTab("tryon"); $("#photo-pick").focus(); return; }
 
   openConfirm({
-    garmentIds: [...selected],
+    slots: { ...slotSelection },
     prompt: $("#prompt").value.trim(),
     turbo: $("#turbo").checked,
-    onStarted: () => { selected.clear(); renderImages(); showTab("tryon"); },
+    onStarted: () => { for (const slot of SLOTS) slotSelection[slot] = null; renderImages(); showTab("tryon"); },
   });
 });
 
@@ -125,12 +193,17 @@ function estimateCost(n) {
 
 async function openConfirm(payload) {
   const { images = [], profilePhoto } = await chrome.storage.local.get(["images", "profilePhoto"]);
-  const garments = payload.garmentIds.map((id) => images.find((i) => i.id === id)).filter(Boolean);
+  const garments = SLOTS.map((slot) => {
+    const item = images.find((i) => i.id === payload.slots[slot]);
+    return item ? { ...item, slot } : null;
+  }).filter(Boolean);
   if (!garments.length) { alert("Выбери хотя бы одну вещь"); return; }
 
   pendingTryOn = payload;
   $("#confirm-photo").innerHTML = profilePhoto?.dataUrl ? `<img src="${profilePhoto.dataUrl}" alt="Моё фото" />` : "";
-  $("#confirm-garments").innerHTML = garments.map((g) => `<img src="${g.src}" alt="" title="${g.src}" />`).join("");
+  $("#confirm-garments").innerHTML = garments
+    .map((g) => `<div class="confirm-garment"><img src="${g.src}" alt="" title="${g.src}" /><span>${SLOT_NAMES[g.slot]}</span></div>`)
+    .join("");
   const n = garments.length;
   $("#confirm-cost").innerHTML =
     `${n} ${plural(n, "вещь", "вещи", "вещей")}${payload.turbo ? " · Turbo" : ""} · ≈ <strong>$${estimateCost(n).toFixed(3)}</strong>`;
@@ -151,10 +224,10 @@ document.addEventListener("keydown", (e) => {
 
 $("#confirm-ok").addEventListener("click", async () => {
   if (!pendingTryOn) return;
-  const { garmentIds, prompt, turbo, onStarted } = pendingTryOn;
+  const { slots, prompt, turbo, onStarted } = pendingTryOn;
   const btn = $("#confirm-ok");
   btn.disabled = true;
-  const res = await chrome.runtime.sendMessage({ type: "START_TRYON", payload: { garmentIds, prompt, turbo } });
+  const res = await chrome.runtime.sendMessage({ type: "START_TRYON", payload: { slots, prompt, turbo } });
   btn.disabled = false;
   closeConfirm();
   if (!res?.ok) { alert(res?.error || "Не удалось запустить примерку"); return; }
@@ -234,7 +307,7 @@ async function renderResults() {
     el.innerHTML = `
       <div class="out">${done ? `<img src="${job.output}" alt="Результат" />` : failed ? "✕" : `<span class="spinner"></span>`}</div>
       <div class="meta">
-        <div class="garments">${job.garments.map((g) => `<img src="${g.src}" alt="" title="${g.src}" />`).join("")}</div>
+        <div class="garments">${job.garments.map((g) => `<img src="${g.src}" alt="" title="${g.slot ? SLOT_NAMES[g.slot] + ": " : ""}${g.src}" />`).join("")}</div>
         <div class="status-line ${failed ? "err" : ""}">
           ${busy ? `<span class="spinner"></span>` : ""}${STATUS_TEXT[job.status] || job.status}${job.note ? ` · ${job.note}` : ""}
           ${failed && job.error ? `<br>${escapeHtml(job.error)}` : ""}
@@ -278,9 +351,12 @@ async function downloadResult(job) {
 }
 
 async function retry(job, images) {
-  const ids = job.garments.map((g) => g.id).filter((id) => images.some((i) => i.id === id));
-  if (!ids.length) { alert("Вещи этой примерки уже удалены"); return; }
-  openConfirm({ garmentIds: ids, prompt: job.prompt, turbo: $("#turbo").checked });
+  const slots = { top: null, bottom: null, shoes: null };
+  for (const g of job.garments) {
+    if (g.slot && images.some((i) => i.id === g.id)) slots[g.slot] = g.id;
+  }
+  if (!Object.values(slots).some(Boolean)) { alert("Вещи этой примерки уже удалены"); return; }
+  openConfirm({ slots, prompt: job.prompt, turbo: $("#turbo").checked });
 }
 
 async function removeJob(id) {

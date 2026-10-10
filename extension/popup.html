@@ -73,6 +73,24 @@
     </p>
   </section>
 
+  <!-- ПОДТВЕРЖДЕНИЕ ПРИМЕРКИ -->
+  <div id="confirm" class="confirm hidden">
+    <div class="confirm-box" role="dialog" aria-labelledby="confirm-title">
+      <h3 id="confirm-title">Запустить примерку?</h3>
+      <div class="confirm-row">
+        <div class="confirm-photo" id="confirm-photo"></div>
+        <span class="confirm-plus">+</span>
+        <div class="confirm-garments" id="confirm-garments"></div>
+      </div>
+      <p class="confirm-cost" id="confirm-cost"></p>
+      <p class="hint">Запрос уйдёт в Replicate, стоимость спишется с твоего аккаунта. «Отмена» ничего не отправляет.</p>
+      <div class="confirm-actions">
+        <button id="confirm-cancel">Отмена</button>
+        <button id="confirm-ok" class="primary">Примерить</button>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

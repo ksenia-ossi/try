@@ -104,18 +104,69 @@ $("#start-tryon").addEventListener("click", async () => {
   if (!replicateToken) { showTab("settings"); setTokenStatus("Сначала добавь API-токен Replicate", "err"); return; }
   if (!profilePhoto?.dataUrl) { showTab("tryon"); $("#photo-pick").focus(); return; }
 
-  const btn = $("#start-tryon");
-  btn.disabled = true;
-  const res = await chrome.runtime.sendMessage({
-    type: "START_TRYON",
-    payload: { garmentIds: [...selected], prompt: $("#prompt").value.trim(), turbo: $("#turbo").checked },
+  openConfirm({
+    garmentIds: [...selected],
+    prompt: $("#prompt").value.trim(),
+    turbo: $("#turbo").checked,
+    onStarted: () => { selected.clear(); renderImages(); showTab("tryon"); },
   });
-  btn.disabled = false;
-  if (!res?.ok) { alert(res?.error || "Не удалось запустить примерку"); return; }
-  selected.clear();
-  renderImages();
-  showTab("tryon");
 });
+
+// ---------- подтверждение примерки ----------
+// Запрос в Replicate уходит только после нажатия «Примерить» в этом окне; «Отмена» ничего не отправляет.
+
+const PRICE_FIRST = 0.015;
+const PRICE_EXTRA = 0.008;
+let pendingTryOn = null;
+
+function estimateCost(n) {
+  return n ? PRICE_FIRST + PRICE_EXTRA * (n - 1) : 0;
+}
+
+async function openConfirm(payload) {
+  const { images = [], profilePhoto } = await chrome.storage.local.get(["images", "profilePhoto"]);
+  const garments = payload.garmentIds.map((id) => images.find((i) => i.id === id)).filter(Boolean);
+  if (!garments.length) { alert("Выбери хотя бы одну вещь"); return; }
+
+  pendingTryOn = payload;
+  $("#confirm-photo").innerHTML = profilePhoto?.dataUrl ? `<img src="${profilePhoto.dataUrl}" alt="Моё фото" />` : "";
+  $("#confirm-garments").innerHTML = garments.map((g) => `<img src="${g.src}" alt="" title="${g.src}" />`).join("");
+  const n = garments.length;
+  $("#confirm-cost").innerHTML =
+    `${n} ${plural(n, "вещь", "вещи", "вещей")}${payload.turbo ? " · Turbo" : ""} · ≈ <strong>$${estimateCost(n).toFixed(3)}</strong>`;
+  $("#confirm").classList.remove("hidden");
+  $("#confirm-ok").focus();
+}
+
+function closeConfirm() {
+  pendingTryOn = null;
+  $("#confirm").classList.add("hidden");
+}
+
+$("#confirm-cancel").addEventListener("click", closeConfirm);
+$("#confirm").addEventListener("click", (e) => { if (e.target === $("#confirm")) closeConfirm(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#confirm").classList.contains("hidden")) closeConfirm();
+});
+
+$("#confirm-ok").addEventListener("click", async () => {
+  if (!pendingTryOn) return;
+  const { garmentIds, prompt, turbo, onStarted } = pendingTryOn;
+  const btn = $("#confirm-ok");
+  btn.disabled = true;
+  const res = await chrome.runtime.sendMessage({ type: "START_TRYON", payload: { garmentIds, prompt, turbo } });
+  btn.disabled = false;
+  closeConfirm();
+  if (!res?.ok) { alert(res?.error || "Не удалось запустить примерку"); return; }
+  onStarted?.();
+});
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
 
 // ---------- моё фото ----------
 
@@ -229,11 +280,7 @@ async function downloadResult(job) {
 async function retry(job, images) {
   const ids = job.garments.map((g) => g.id).filter((id) => images.some((i) => i.id === id));
   if (!ids.length) { alert("Вещи этой примерки уже удалены"); return; }
-  const res = await chrome.runtime.sendMessage({
-    type: "START_TRYON",
-    payload: { garmentIds: ids, prompt: job.prompt, turbo: $("#turbo").checked },
-  });
-  if (!res?.ok) alert(res?.error || "Не удалось запустить примерку");
+  openConfirm({ garmentIds: ids, prompt: job.prompt, turbo: $("#turbo").checked });
 }
 
 async function removeJob(id) {
